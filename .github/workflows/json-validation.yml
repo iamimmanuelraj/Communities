@@ -54,7 +54,8 @@ jobs:
                 "location": { "type": "string" },
                 "communityName": { "type": "string" },
                 "communityLogo": { "type": "string", "format": "uri" }
-              }
+              },
+              "additionalProperties": false
             }
           }
           EOL
