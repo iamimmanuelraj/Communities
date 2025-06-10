@@ -24,7 +24,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm install -g ajv-cli jsonlint typescript ts-json-schema-generator
+          npm install -g ajv-cli ajv jsonlint typescript ts-json-schema-generator
 
       - name: Generate schema from TypeScript and validate Events JSON
         id: validate-events
@@ -45,7 +45,7 @@ jobs:
           "
 
           # Validate events.json against the generated array schema
-          npx ajv validate -s events-array-schema.json -d src/data/events.json --array --all-errors > events_validation_output.txt 2>&1
+          npx ajv-cli validate -s events-array-schema.json -d src/data/events.json --array --all-errors > events_validation_output.txt 2>&1
           validation_status=$?
 
           if [ $validation_status -ne 0 ]; then
