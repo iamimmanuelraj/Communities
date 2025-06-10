@@ -180,8 +180,8 @@ jobs:
                 repo: context.repo.repo,
                 pull_number: context.issue.number,
                 merge_method: 'squash',
-                commit_title: `Automatically merged PR #${context.issue.number}`,
-                commit_message: 'Auto-merged after all JSON validation and linting checks passed'
+                commit_title: `Update JSON data files in PR #${context.issue.number}`,
+                commit_message: 'This automated squash merge includes validated changes to JSON data files.\n\nAll JSON validation and linting checks have passed successfully. The PR contained only changes to the structured data files that power the Communities platform.'
               });
               console.log(`Successfully merged PR #${context.issue.number}`);
               
