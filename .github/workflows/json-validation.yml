@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/data/events.json'
       - 'src/data/communities.json'
+      - 'src/types/event.d.ts'
 
 permissions:
   contents: read
@@ -23,42 +24,36 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install -g ajv-cli jsonlint
-
-      - name: Create JSON Schema for events
         run: |
-          cat > events-schema.json << 'EOL'
-          {
-            "$schema": "http://json-schema.org/draft-07/schema#",
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": [
-                "eventName",
-                "eventDescription",
-                "eventDate",
-                "eventTime",
-                "eventVenue",
-                "eventLink",
-                "location",
-                "communityName",
-                "communityLogo"
-              ],
-              "properties": {
-                "eventName": { "type": "string" },
-                "eventDescription": { "type": "string" },
-                "eventDate": { "type": "string", "format": "date" },
-                "eventTime": { "type": "string" },
-                "eventVenue": { "type": "string" },
-                "eventLink": { "type": "string", "format": "uri" },
-                "location": { "type": "string" },
-                "communityName": { "type": "string" },
-                "communityLogo": { "type": "string", "format": "uri" }
-              },
-              "additionalProperties": false
-            }
-          }
-          EOL
+          npm install -g ajv-cli jsonlint typescript ts-json-schema-generator
+
+      - name: Generate schema from TypeScript and validate Events JSON
+        id: validate-events
+        run: |
+          # Generate JSON schema from TypeScript type definition
+          ts-json-schema-generator --path src/types/event.d.ts --type Event --out events-schema.json --no-type-check --expose all
+
+          # Modify the generated schema to handle array of events
+          node -e "
+            const schema = require('./events-schema.json');
+            const arraySchema = {
+              '$schema': 'http://json-schema.org/draft-07/schema#',
+              'type': 'array',
+              'items': schema
+            };
+            require('fs').writeFileSync('events-array-schema.json', JSON.stringify(arraySchema, null, 2));
+          "
+
+          # Validate events.json against the generated array schema
+          ajv validate -s events-array-schema.json -d src/data/events.json --all-errors > events_validation_output.txt 2>&1
+          validation_status=$?
+
+          if [ $validation_status -ne 0 ]; then
+            echo "events_validation_failed=true" >> $GITHUB_OUTPUT
+            cat events_validation_output.txt >> $GITHUB_STEP_SUMMARY
+          else
+            echo "events_validation_failed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create JSON Schema for communities
         run: |
@@ -92,17 +87,6 @@ jobs:
             }
           }
           EOL
-
-      - name: Validate Events JSON fields
-        id: validate-events
-        run: |
-          ajv validate -s events-schema.json -d src/data/events.json --all-errors > events_validation_output.txt 2>&1
-          if [ $? -ne 0 ]; then
-            echo "events_validation_failed=true" >> $GITHUB_OUTPUT
-            cat events_validation_output.txt >> $GITHUB_STEP_SUMMARY
-          else
-            echo "events_validation_failed=false" >> $GITHUB_OUTPUT
-          fi
 
       - name: Validate Communities JSON fields
         id: validate-communities
