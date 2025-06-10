@@ -163,7 +163,7 @@ jobs:
             let branchName;
 
             try {
-              // First, get the PR information to retrieve the branch name
+              // First, get the PR information to retrieve the branch name and details
               const { data: prData } = await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -174,14 +174,124 @@ jobs:
               branchName = prData.head.ref;
               console.log(`PR branch name: ${branchName}`);
               
-              // Merge the PR using squash method
+              // Get PR files to identify which JSON files were modified
+              const { data: files } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number
+              });
+              
+              const fs = require('fs');
+              
+              // Check which JSON files were modified
+              const eventsModified = files.some(file => file.filename === 'src/data/events.json');
+              const communitiesModified = files.some(file => file.filename === 'src/data/communities.json');
+              
+              // Initialize variables for commit info
+              let commitTitle = '';
+              let commitMessage = 'This automated squash merge includes validated changes to JSON data files:\n\n';
+              
+              // Get specific details from the modified files
+              if (eventsModified) {
+                try {
+                  // Read and parse the events.json file
+                  const eventsData = JSON.parse(fs.readFileSync('src/data/events.json', 'utf8'));
+                  
+                  // Get changes from the PR
+                  const { data: eventDiff } = await github.rest.pulls.getFiles({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.issue.number,
+                    path: 'src/data/events.json'
+                  });
+                  
+                  // Extract event information for commit message
+                  const eventTitles = eventsData
+                    .filter(event => new Date(event.startDate) >= new Date()) // Future events
+                    .slice(0, 3) // Limit to 3 events to keep message reasonable
+                    .map(event => `"${event.title}"`);
+                  
+                  // Add event-specific information to commit message
+                  if (eventTitles.length > 0) {
+                    commitMessage += `• Updated events including ${eventTitles.join(', ')}\n`;
+                    if (eventTitles.length === 1) {
+                      commitTitle = `Add ${eventTitles[0]} event in PR #${context.issue.number}`;
+                    } else {
+                      commitTitle = `Add ${eventTitles.length} events in PR #${context.issue.number}`;
+                    }
+                  } else {
+                    commitMessage += `• Updated events.json with event information\n`;
+                    commitTitle = `Update events data in PR #${context.issue.number}`;
+                  }
+                } catch (error) {
+                  console.log(`Error parsing events.json: ${error.message}`);
+                  commitMessage += `• Updated events.json with new community event information\n`;
+                  if (!commitTitle) {
+                    commitTitle = `Update events data in PR #${context.issue.number}`;
+                  }
+                }
+              }
+              
+              if (communitiesModified) {
+                try {
+                  // Read and parse the communities.json file
+                  const communitiesData = JSON.parse(fs.readFileSync('src/data/communities.json', 'utf8'));
+                  
+                  // Extract community names for commit message
+                  const communityNames = communitiesData
+                    .slice(0, 3) // Limit to 3 communities to keep message reasonable
+                    .map(community => `"${community.name}"`);
+                  
+                  // Add community-specific information to commit message
+                  if (communityNames.length > 0) {
+                    commitMessage += `• Updated communities including ${communityNames.join(', ')}\n`;
+                    if (!eventsModified) {
+                      if (communityNames.length === 1) {
+                        commitTitle = `Add ${communityNames[0]} community in PR #${context.issue.number}`;
+                      } else {
+                        commitTitle = `Update ${communityNames.length} communities in PR #${context.issue.number}`;
+                      }
+                    }
+                  } else {
+                    commitMessage += `• Updated communities.json with community information\n`;
+                    if (!commitTitle) {
+                      commitTitle = `Update communities data in PR #${context.issue.number}`;
+                    }
+                  }
+                } catch (error) {
+                  console.log(`Error parsing communities.json: ${error.message}`);
+                  commitMessage += `• Updated communities.json with new community information\n`;
+                  if (!commitTitle) {
+                    commitTitle = `Update communities data in PR #${context.issue.number}`;
+                  }
+                }
+              }
+              
+              // Default title if needed
+              if (!commitTitle) {
+                if (eventsModified && communitiesModified) {
+                  commitTitle = `Update events and communities data in PR #${context.issue.number}`;
+                } else {
+                  commitTitle = `Update JSON data files in PR #${context.issue.number}`;
+                }
+              }
+              
+              // Add validation information
+              commitMessage += '\nAll JSON validation and linting checks have passed successfully.';
+              
+              // Add PR title and description for additional context
+              if (prData.title) {
+                commitMessage += `\n\nOriginal PR: "${prData.title}"`;
+              }
+              
+              // Merge the PR using squash method with enhanced commit info
               await github.rest.pulls.merge({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.issue.number,
                 merge_method: 'squash',
-                commit_title: `Update JSON data files in PR #${context.issue.number}`,
-                commit_message: 'This automated squash merge includes validated changes to JSON data files.\n\nAll JSON validation and linting checks have passed successfully. The PR contained only changes to the structured data files that power the Communities platform.'
+                commit_title: commitTitle,
+                commit_message: commitMessage
               });
               console.log(`Successfully merged PR #${context.issue.number}`);
               
