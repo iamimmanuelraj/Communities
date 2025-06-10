@@ -21,8 +21,6 @@ jobs:
           node-version: '22'
 
       - uses: actions/checkout@v4
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
 
       - name: Install dependencies
         run: |
@@ -46,7 +44,7 @@ jobs:
           "
 
           # Validate events.json against the generated array schema
-          ajv validate -s events-array-schema.json -d src/data/events.json --all-errors > events_validation_output.txt 2>&1
+          npx ajv validate -s events-array-schema.json -d src/data/events.json --array --all-errors > events_validation_output.txt 2>&1
           validation_status=$?
 
           if [ $validation_status -ne 0 ]; then
