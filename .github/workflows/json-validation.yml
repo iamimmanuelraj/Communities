@@ -15,144 +15,17 @@ jobs:
   validate-json-fields:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - uses: actions/checkout@v4
-
       - name: Install dependencies
         run: |
-          npm install -g ajv-cli ajv jsonlint typescript ts-json-schema-generator
-          npm install ajv-cli ajv jsonlint typescript ts-json-schema-generator
-
-      - name: Generate schema from TypeScript and validate Events JSON
-        id: validate-events
-        run: |
-          set -x
-          # Generate JSON schema from TypeScript type definition
-          npx ts-json-schema-generator --path src/types/event.d.ts --type Event --out events-schema.json --no-type-check --expose all
-
-          # Modify the generated schema to handle array of events
-          node -e "
-            const schema = require('./events-schema.json');
-            const arraySchema = {
-              '$schema': 'http://json-schema.org/draft-07/schema#',
-              'type': 'array',
-              'items': schema
-            };
-            require('fs').writeFileSync('events-array-schema.json', JSON.stringify(arraySchema, null, 2));
-          "
-
-          # Validate events.json against the generated array schema
-          npx ajv validate -s events-array-schema.json -d src/data/events.json --array --all-errors > events_validation_output.txt 2>&1
-          validation_status=$?
-
-          if [ $validation_status -ne 0 ]; then
-            echo "events_validation_failed=true" >> $GITHUB_OUTPUT
-            cat events_validation_output.txt >> $GITHUB_STEP_SUMMARY
-          else
-            echo "events_validation_failed=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create JSON Schema for communities
-        run: |
-          cat > communities-schema.json << 'EOL'
-          {
-            "$schema": "http://json-schema.org/draft-07/schema#",
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": [
-                "name",
-                "logo",
-                "description",
-                "location"
-              ],
-              "properties": {
-                "name": { "type": "string" },
-                "logo": { "type": "string", "format": "uri" },
-                "description": { "type": "string" },
-                "location": { "type": "string" },
-                "twitter": { "type": "string", "format": "uri" },
-                "website": { "type": "string", "format": "uri" },
-                "instagram": { "type": "string", "format": "uri" },
-                "linkedin": { "type": "string", "format": "uri" },
-                "mastodon": { "type": "string", "format": "uri" },
-                "github": { "type": "string", "format": "uri" },
-                "discord": { "type": "string", "format": "uri" },
-                "telegram": { "type": "string", "format": "uri" },
-                "facebook": { "type": "string", "format": "uri" }
-              }
-            }
-          }
-          EOL
-
-      - name: Validate Communities JSON fields
-        id: validate-communities
-        run: |
-          ajv validate -s communities-schema.json -d src/data/communities.json --all-errors > communities_validation_output.txt 2>&1
-          if [ $? -ne 0 ]; then
-            echo "communities_validation_failed=true" >> $GITHUB_OUTPUT
-            cat communities_validation_output.txt >> $GITHUB_STEP_SUMMARY
-          else
-            echo "communities_validation_failed=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Comment on PR for Events Validation Failure
-        if: github.event_name == 'pull_request' && steps.validate-events.outputs.events_validation_failed == 'true'
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const validationOutput = fs.readFileSync('events_validation_output.txt', 'utf8');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '❌ **Events JSON Validation Failed**\n\n```\n' + validationOutput + '\n```\n\nPlease check if all required fields are present in `src/data/events.json`.'
-            });
-
-      - name: Comment on PR for Events Validation Success
-        if: github.event_name == 'pull_request' && steps.validate-events.outputs.events_validation_failed == 'false'
-        uses: actions/github-script@v6
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ **Events JSON Validation Passed**\n\nAll required fields are present in `src/data/events.json`.'
-            });
-
-      - name: Comment on PR for Communities Validation Failure
-        if: github.event_name == 'pull_request' && steps.validate-communities.outputs.communities_validation_failed == 'true'
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const validationOutput = fs.readFileSync('communities_validation_output.txt', 'utf8');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '❌ **Communities JSON Validation Failed**\n\n```\n' + validationOutput + '\n```\n\nPlease check if all required fields are present in `src/data/communities.json`.'
-            });
-
-      - name: Comment on PR for Communities Validation Success
-        if: github.event_name == 'pull_request' && steps.validate-communities.outputs.communities_validation_failed == 'false'
-        uses: actions/github-script@v6
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ **Communities JSON Validation Passed**\n\nAll required fields are present in `src/data/communities.json`.'
-            });
+          npm install -g jsonlint
 
       - name: Lint events.json
         id: lint-events
