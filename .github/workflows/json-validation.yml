@@ -160,7 +160,21 @@ jobs:
           script: |
             console.log(`Attempting to merge PR #${context.issue.number}`);
 
+            let branchName;
+
             try {
+              // First, get the PR information to retrieve the branch name
+              const { data: prData } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number
+              });
+              
+              // Save the branch name for later deletion
+              branchName = prData.head.ref;
+              console.log(`PR branch name: ${branchName}`);
+              
+              // Merge the PR
               await github.rest.pulls.merge({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -170,10 +184,19 @@ jobs:
                 commit_message: 'Auto-merged after all JSON validation and linting checks passed'
               });
               console.log(`Successfully merged PR #${context.issue.number}`);
+              
+              // Delete the branch after successful merge
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `heads/${branchName}`
+              });
+              console.log(`Successfully deleted branch: ${branchName}`);
+              
             } catch (error) {
-              console.log(`Failed to merge PR #${context.issue.number}`);
+              console.log(`Failed to process PR #${context.issue.number}`);
               console.log(error);
-              core.setFailed(`Failed to merge PR: ${error.message}`);
+              core.setFailed(`Failed to process PR: ${error.message}`);
             }
 
       - name: Fail workflow if validation failed
