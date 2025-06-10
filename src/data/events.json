@@ -362,5 +362,16 @@
     "location": "Chennai",
     "communityName": "Swift Chennai",
     "communityLogo": "https://i.ibb.co/pjGZgmHn/5ef8911a-11eb-4fb8-8dbf-a2c0c5a283d1.jpg"
+  },
+  {
+    "eventName": "Test EVENT",
+    "eventDescription": "Test EVENT",
+    "eventDate": "2025-06-11",
+    "eventTime": "20:00",
+    "eventVenue": "Test EVENT",
+    "eventLink": "Test EVENT",
+    "location": "Test EVENT",
+    "communityName": "Test EVENT",
+    "communityLogo": "Test EVENT"
   }
 ]
