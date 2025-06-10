@@ -15,20 +15,18 @@ jobs:
   validate-json-fields:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
+      - uses: actions/checkout@v4
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Install dependencies
         run: |
           npm install -g ajv-cli jsonlint typescript ts-json-schema-generator
-
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
 
       - name: Generate schema from TypeScript and validate Events JSON
         id: validate-events
