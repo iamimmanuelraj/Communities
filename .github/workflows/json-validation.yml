@@ -53,7 +53,7 @@ jobs:
                 "eventLink": { "type": "string", "format": "uri" },
                 "location": { "type": "string" },
                 "communityName": { "type": "string" },
-                "communityLogo": { "type": "string", "format": "uri" }
+                "communityLogo": { "type": "string" }
               }
             }
           }
