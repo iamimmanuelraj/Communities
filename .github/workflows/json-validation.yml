@@ -23,7 +23,7 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install -g ajv-cli
+        run: npm install -g ajv-cli jsonlint
 
       - name: Create JSON Schema for events
         run: |
@@ -114,7 +114,7 @@ jobs:
             echo "communities_validation_failed=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Comment on PR for Events Validation
+      - name: Comment on PR for Events Validation Failure
         if: github.event_name == 'pull_request' && steps.validate-events.outputs.events_validation_failed == 'true'
         uses: actions/github-script@v6
         with:
@@ -129,7 +129,19 @@ jobs:
               body: '❌ **Events JSON Validation Failed**\n\n```\n' + validationOutput + '\n```\n\nPlease check if all required fields are present in `src/data/events.json`.'
             });
 
-      - name: Comment on PR for Communities Validation
+      - name: Comment on PR for Events Validation Success
+        if: github.event_name == 'pull_request' && steps.validate-events.outputs.events_validation_failed == 'false'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **Events JSON Validation Passed**\n\nAll required fields are present in `src/data/events.json`.'
+            });
+
+      - name: Comment on PR for Communities Validation Failure
         if: github.event_name == 'pull_request' && steps.validate-communities.outputs.communities_validation_failed == 'true'
         uses: actions/github-script@v6
         with:
@@ -144,8 +156,96 @@ jobs:
               body: '❌ **Communities JSON Validation Failed**\n\n```\n' + validationOutput + '\n```\n\nPlease check if all required fields are present in `src/data/communities.json`.'
             });
 
-      - name: Comment on PR for Successful Validation
-        if: github.event_name == 'pull_request' && steps.validate-events.outputs.events_validation_failed == 'false' && steps.validate-communities.outputs.communities_validation_failed == 'false'
+      - name: Comment on PR for Communities Validation Success
+        if: github.event_name == 'pull_request' && steps.validate-communities.outputs.communities_validation_failed == 'false'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **Communities JSON Validation Passed**\n\nAll required fields are present in `src/data/communities.json`.'
+            });
+
+      - name: Lint events.json
+        id: lint-events
+        run: |
+          jsonlint -q src/data/events.json > events_lint_output.txt 2>&1
+          if [ $? -ne 0 ]; then
+            echo "events_lint_failed=true" >> $GITHUB_OUTPUT
+            cat events_lint_output.txt >> $GITHUB_STEP_SUMMARY
+          else
+            echo "events_lint_failed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Lint communities.json
+        id: lint-communities
+        run: |
+          jsonlint -q src/data/communities.json > communities_lint_output.txt 2>&1
+          if [ $? -ne 0 ]; then
+            echo "communities_lint_failed=true" >> $GITHUB_OUTPUT
+            cat communities_lint_output.txt >> $GITHUB_STEP_SUMMARY
+          else
+            echo "communities_lint_failed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR for Events Linting Failure
+        if: github.event_name == 'pull_request' && steps.lint-events.outputs.events_lint_failed == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const lintOutput = fs.readFileSync('events_lint_output.txt', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Events JSON Linting Failed**\n\n```\n' + lintOutput + '\n```\n\nPlease fix the JSON syntax in `src/data/events.json`.'
+            });
+
+      - name: Comment on PR for Events Linting Success
+        if: github.event_name == 'pull_request' && steps.lint-events.outputs.events_lint_failed == 'false'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **Events JSON Linting Passed**\n\nThe JSON syntax in `src/data/events.json` is valid.'
+            });
+
+      - name: Comment on PR for Communities Linting Failure
+        if: github.event_name == 'pull_request' && steps.lint-communities.outputs.communities_lint_failed == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const lintOutput = fs.readFileSync('communities_lint_output.txt', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Communities JSON Linting Failed**\n\n```\n' + lintOutput + '\n```\n\nPlease fix the JSON syntax in `src/data/communities.json`.'
+            });
+
+      - name: Comment on PR for Communities Linting Success
+        if: github.event_name == 'pull_request' && steps.lint-communities.outputs.communities_lint_failed == 'false'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **Communities JSON Linting Passed**\n\nThe JSON syntax in `src/data/communities.json` is valid.'
+            });
+
+      - name: Overall PR Summary and Approval
+        if: github.event_name == 'pull_request' && steps.lint-events.outputs.events_lint_failed == 'false' && steps.lint-communities.outputs.communities_lint_failed == 'false' && steps.validate-events.outputs.events_validation_failed == 'false' && steps.validate-communities.outputs.communities_validation_failed == 'false'
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -154,18 +254,22 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '✅ **JSON Validation Passed**\n\nAll required fields are present in the JSON files.'
+              body: '🎉 **All JSON Checks Passed**\n\n' +
+                    '- ✅ Events JSON Linting: Passed\n' +
+                    '- ✅ Communities JSON Linting: Passed\n' +
+                    '- ✅ Events JSON Validation: Passed\n' +
+                    '- ✅ Communities JSON Validation: Passed\n\n' +
+                    'Your changes are ready to be merged!'
             });
 
-            // Auto-approve the PR
             github.rest.pulls.createReview({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.issue.number,
               event: 'APPROVE',
-              body: 'Automatically approved because all JSON validation checks passed.'
+              body: 'Automatically approved because all JSON validation and linting checks passed.'
             });
 
       - name: Fail workflow if validation failed
-        if: steps.validate-events.outputs.events_validation_failed == 'true' || steps.validate-communities.outputs.communities_validation_failed == 'true'
+        if: steps.validate-events.outputs.events_validation_failed == 'true' || steps.validate-communities.outputs.communities_validation_failed == 'true' || steps.lint-events.outputs.events_lint_failed == 'true' || steps.lint-communities.outputs.communities_lint_failed == 'true'
         run: exit 1
