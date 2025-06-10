@@ -174,12 +174,12 @@ jobs:
               branchName = prData.head.ref;
               console.log(`PR branch name: ${branchName}`);
               
-              // Merge the PR
+              // Merge the PR using squash method
               await github.rest.pulls.merge({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.issue.number,
-                merge_method: 'merge',
+                merge_method: 'squash',
                 commit_title: `Automatically merged PR #${context.issue.number}`,
                 commit_message: 'Auto-merged after all JSON validation and linting checks passed'
               });
