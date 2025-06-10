@@ -29,6 +29,7 @@ jobs:
       - name: Generate schema from TypeScript and validate Events JSON
         id: validate-events
         run: |
+          set -x
           # Generate JSON schema from TypeScript type definition
           npx ts-json-schema-generator --path src/types/event.d.ts --type Event --out events-schema.json --no-type-check --expose all
 
