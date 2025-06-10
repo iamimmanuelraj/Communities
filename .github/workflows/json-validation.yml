@@ -1,0 +1,181 @@
+name: Validate JSON Fields
+
+on:
+  pull_request:
+    paths:
+      - 'src/data/events.json'
+      - 'src/data/communities.json'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  validate-json-fields:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: |
+          npm install -g jsonlint
+
+      - name: Lint events.json
+        id: lint-events
+        run: |
+          jsonlint -q src/data/events.json > events_lint_output.txt 2>&1
+          if [ $? -ne 0 ]; then
+            echo "events_lint_failed=true" >> $GITHUB_OUTPUT
+            cat events_lint_output.txt >> $GITHUB_STEP_SUMMARY
+          else
+            echo "events_lint_failed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Lint communities.json
+        id: lint-communities
+        run: |
+          jsonlint -q src/data/communities.json > communities_lint_output.txt 2>&1
+          if [ $? -ne 0 ]; then
+            echo "communities_lint_failed=true" >> $GITHUB_OUTPUT
+            cat communities_lint_output.txt >> $GITHUB_STEP_SUMMARY
+          else
+            echo "communities_lint_failed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR for Events Linting Failure
+        if: github.event_name == 'pull_request' && steps.lint-events.outputs.events_lint_failed == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const lintOutput = fs.readFileSync('events_lint_output.txt', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Events JSON Linting Failed**\n\n```\n' + lintOutput + '\n```\n\nPlease fix the JSON syntax in `src/data/events.json`.'
+            });
+
+      - name: Comment on PR for Events Linting Success
+        if: github.event_name == 'pull_request' && steps.lint-events.outputs.events_lint_failed == 'false'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **Events JSON Linting Passed**\n\nThe JSON syntax in `src/data/events.json` is valid.'
+            });
+
+      - name: Comment on PR for Communities Linting Failure
+        if: github.event_name == 'pull_request' && steps.lint-communities.outputs.communities_lint_failed == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const lintOutput = fs.readFileSync('communities_lint_output.txt', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Communities JSON Linting Failed**\n\n```\n' + lintOutput + '\n```\n\nPlease fix the JSON syntax in `src/data/communities.json`.'
+            });
+
+      - name: Comment on PR for Communities Linting Success
+        if: github.event_name == 'pull_request' && steps.lint-communities.outputs.communities_lint_failed == 'false'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **Communities JSON Linting Passed**\n\nThe JSON syntax in `src/data/communities.json` is valid.'
+            });
+
+      - name: Overall PR Summary and Approval
+        id: approve-pr
+        if: github.event_name == 'pull_request' && steps.lint-events.outputs.events_lint_failed == 'false' && steps.lint-communities.outputs.communities_lint_failed == 'false'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🎉 **All JSON Checks Passed**\n\n' +
+                    '- ✅ Events JSON Linting: Passed\n' +
+                    '- ✅ Communities JSON Linting: Passed\n\n' +
+                    'Your changes are ready to be merged!'
+            });
+
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              event: 'APPROVE',
+              body: 'Automatically approved because all JSON validation and linting checks passed.'
+            });
+
+            core.setOutput('approved', 'true');
+
+      - name: Check if PR only changes JSON data files
+        id: check-pr-files
+        if: steps.approve-pr.outputs.approved == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Get PR files
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            // Check if only JSON files in src/data are modified
+            const jsonOnly = files.every(file => 
+              (file.filename === 'src/data/events.json' || 
+               file.filename === 'src/data/communities.json')
+            );
+
+            console.log(`PR #${context.issue.number} contains only JSON data files: ${jsonOnly}`);
+            core.setOutput('json_only', jsonOnly.toString());
+
+      - name: Auto Merge PR
+        if: steps.check-pr-files.outputs.json_only == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            console.log(`Attempting to merge PR #${context.issue.number}`);
+
+            try {
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                merge_method: 'merge',
+                commit_title: `Automatically merged PR #${context.issue.number}`,
+                commit_message: 'Auto-merged after all JSON validation and linting checks passed'
+              });
+              console.log(`Successfully merged PR #${context.issue.number}`);
+            } catch (error) {
+              console.log(`Failed to merge PR #${context.issue.number}`);
+              console.log(error);
+              core.setFailed(`Failed to merge PR: ${error.message}`);
+            }
+
+      - name: Fail workflow if validation failed
+        if: steps.lint-events.outputs.events_lint_failed == 'true' || steps.lint-communities.outputs.communities_lint_failed == 'true'
+        run: exit 1
