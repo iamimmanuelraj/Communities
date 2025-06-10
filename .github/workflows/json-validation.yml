@@ -7,7 +7,7 @@ on:
       - 'src/data/communities.json'
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -103,6 +103,7 @@ jobs:
             });
 
       - name: Overall PR Summary and Approval
+        id: approve-pr
         if: github.event_name == 'pull_request' && steps.lint-events.outputs.events_lint_failed == 'false' && steps.lint-communities.outputs.communities_lint_failed == 'false'
         uses: actions/github-script@v6
         with:
@@ -114,20 +115,67 @@ jobs:
               repo: context.repo.repo,
               body: '🎉 **All JSON Checks Passed**\n\n' +
                     '- ✅ Events JSON Linting: Passed\n' +
-                    '- ✅ Communities JSON Linting: Passed\n' +
-                    '- ✅ Events JSON Validation: Passed\n' +
-                    '- ✅ Communities JSON Validation: Passed\n\n' +
+                    '- ✅ Communities JSON Linting: Passed\n\n' +
                     'Your changes are ready to be merged!'
             });
 
-            github.rest.pulls.createReview({
+            await github.rest.pulls.createReview({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.issue.number,
               event: 'APPROVE',
               body: 'Automatically approved because all JSON validation and linting checks passed.'
             });
+            
+            core.setOutput('approved', 'true');
+
+      - name: Check if PR only changes JSON data files
+        id: check-pr-files
+        if: steps.approve-pr.outputs.approved == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Get PR files
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            
+            // Check if only JSON files in src/data are modified
+            const jsonOnly = files.every(file => 
+              (file.filename === 'src/data/events.json' || 
+               file.filename === 'src/data/communities.json')
+            );
+            
+            console.log(`PR #${context.issue.number} contains only JSON data files: ${jsonOnly}`);
+            core.setOutput('json_only', jsonOnly.toString());
+
+      - name: Auto Merge PR
+        if: steps.check-pr-files.outputs.json_only == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            console.log(`Attempting to merge PR #${context.issue.number}`);
+            
+            try {
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                merge_method: 'merge',
+                commit_title: `Automatically merged PR #${context.issue.number}`,
+                commit_message: 'Auto-merged after all JSON validation and linting checks passed'
+              });
+              console.log(`Successfully merged PR #${context.issue.number}`);
+            } catch (error) {
+              console.log(`Failed to merge PR #${context.issue.number}`);
+              console.log(error);
+              core.setFailed(`Failed to merge PR: ${error.message}`);
+            }
 
       - name: Fail workflow if validation failed
-        if: steps.validate-events.outputs.events_validation_failed == 'true' || steps.validate-communities.outputs.communities_validation_failed == 'true' || steps.lint-events.outputs.events_lint_failed == 'true' || steps.lint-communities.outputs.communities_lint_failed == 'true'
+        if: steps.lint-events.outputs.events_lint_failed == 'true' || steps.lint-communities.outputs.communities_lint_failed == 'true'
         run: exit 1
