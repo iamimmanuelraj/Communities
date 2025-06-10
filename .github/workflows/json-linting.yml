@@ -10,6 +10,10 @@ on:
       - 'src/data/events.json'
       - 'src/data/communities.json'
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   json-linting:
     runs-on: ubuntu-latest
@@ -88,6 +92,15 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: '✅ **JSON Linting Passed**\n\nAll JSON files have valid syntax.'
+            });
+
+            // Auto-approve the PR
+            github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              event: 'APPROVE',
+              body: 'Automatically approved because all JSON linting checks passed.'
             });
 
       - name: Fail workflow if linting failed
